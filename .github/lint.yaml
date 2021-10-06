@@ -1,0 +1,56 @@
+name: Unit Test PR Checks
+
+on:
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  unit-tests-pr-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          fetch-depth: 1
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.PR_CHECK_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.PR_CHECK_AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Set up python 
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: Setup Poetry
+        uses: abatilo/actions-poetry@v2.0.0
+        with:
+          poetry-version: 1.1.6
+
+      - name: Build Project
+        working-directory: ./
+        run: make build
+
+      - name: Install Project Deps
+        working-directory: ./
+        run: |
+          sudo apt update && sudo apt install -y libcurl4-openssl-dev libssl-dev
+          pip install ./dist/deps/*.whl
+          poetry install --no-interaction --no-root
+
+      - name: Install Project
+        working-directory: ./
+        run: pip install ./dist/*.whl
+
+      - name: Lint test
+        working-directory: ./
+        run: |
+          make lint-test
+
