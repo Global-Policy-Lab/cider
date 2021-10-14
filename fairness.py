@@ -1,24 +1,30 @@
+"""
+Evaluates fairness of a machine learning module across a characteristic 
+(whether or not the machine learning module discriminates across different groups in that characteristic).
+"""
+from numpy import character
 from box import Box
 import yaml
 from helpers.utils import *
 from helpers.plot_utils import *
 from helpers.io_utils import *
 from helpers.ml_utils import *
-from scipy.stats import f_oneway
+from scipy.stats import f_oneway, chi2_contingency
+from datastore import *
+from sklearn.metrics import recall_score, precision_score
 
 
 class Fairness:
 
-    def __init__(self, cfg_dir, dataframe=None, clean_folders=False):
+    def __init__(self, datastore: DataStore, dataframe=None, clean_folders=False):
+        self.cfg = datastore.cfg
+        self.ds = datastore
 
-        # Read config file
-        with open(cfg_dir, "r") as ymlfile:
-            cfg = Box(yaml.safe_load(ymlfile))
-        self.cfg = cfg
-        data_path = cfg.path.fairness.data + cfg.path.fairness.file_names.data
+        data_path = self.cfg.path.data + self.cfg.path.file_names.fairness
         self.data = pd.read_csv(data_path)
         self.data['random'] = np.random.rand(len(self.data))
-        outputs = cfg.path.fairness.outputs
+
+        outputs = self.cfg.path.outputs
         self.outputs = outputs
         self.default_colors = sns.color_palette('Set2', 100)
 
@@ -34,6 +40,9 @@ class Fairness:
             self.weighted_data['weight'] = self.weighted_data['weight']/self.weighted_data['weight'].min()
         self.weighted_data = pd.DataFrame(np.repeat(self.weighted_data.values, self.weighted_data['weight'], axis=0), columns=self.weighted_data.columns)\
             .astype(self.unweighted_data.dtypes)
+    # --------------------------------
+    # SINGLULAR FUNCTIONS
+    # --------------------------------
 
     def rank_residual(self, var1, var2, characteristic, weighted=False):
         
@@ -52,6 +61,12 @@ class Fairness:
         return {group: data[data[characteristic] == group]['rank_residual'].values.flatten() for group in data[characteristic].unique()}
 
     def demographic_parity(self, var1, var2, characteristic, p, weighted=False):
+        """
+        var1 = groundtruth
+        var2 = proxies. The thing that you're evaluating the fairness of.
+        characteristic = how the group is divided
+        p = target the top p percent
+        """
 
         data = self.weighted_data if weighted else self.unweighted_data
 
@@ -72,6 +87,214 @@ class Fairness:
             results[group]['poverty_share'] = 100*subset['targeted_var1'].mean()
             results[group]['demographic_parity'] = 100*subset['targeted_var2'].mean() - 100*subset['targeted_var1'].mean()
         return results
+    
+    def independence(self, var1, var2, characteristic, p, weighted=False):
+        """
+        Performs the chi-squared independence test between the proxy variable and the sensitive characterisrtic
+
+        var2 -- the proxy variable
+        characteristic -- sensitive characteristic
+
+        """
+        data = self.weighted_data if weighted else self.unweighted_data
+
+        # Simulate targeting by var1 and var2
+        num_ones = int((p/100)*len(data))
+        num_zeros = len(data) - num_ones
+        targeting_vector = np.concatenate([np.ones(num_ones), np.zeros(num_zeros)])
+        data = data.sort_values([var2, 'random'], ascending=True)
+        data['targeted_var2'] = targeting_vector
+
+        # Get targeted percent for each group
+        results = {}
+        for group in data[characteristic].unique():
+            subset = data[data[characteristic] == group]
+            results[group] = subset['targeted_var2'].mean()
+
+        # Create a pivot table between the characteristic and the proxy
+        pivot = data.pivot_table(index=characteristic, columns='targeted_var2', aggfunc='count', fill_value=0).iloc[:, 0:2]
+
+        # Run independence test
+        chi2, p, dof, ex = chi2_contingency(pivot)
+        results['ind_pval'] = p
+        return results
+    
+    def recall_per_group(self, var1, var2, characteristic, p, weighted=False):
+        """
+        var1 = groundtruth
+        var2 = proxies. The thing that you're evaluating the fairness of.
+        characteristic = how the group is divided
+        p = target the top p percent
+        """
+
+        data = self.weighted_data if weighted else self.unweighted_data
+
+        # Simulate targeting by var1 and var2
+        num_ones = int((p/100)*len(data))
+        num_zeros = len(data) - num_ones
+        targeting_vector = np.concatenate([np.ones(num_ones), np.zeros(num_zeros)])
+        data = data.sort_values([var1, 'random'], ascending=True)
+        data['targeted_var1'] = targeting_vector
+        data = data.sort_values([var2, 'random'], ascending=True)
+        data['targeted_var2'] = targeting_vector
+
+        # Get recall for each group
+        results = {}
+        for group in data[characteristic].unique():
+            subset = data[data[characteristic] == group]
+            results[group] = recall_score(subset['targeted_var1'], subset['targeted_var2'], zero_division=0)
+        
+        # Create a pivot table between true positives and false negatives
+        pivot = data[data['targeted_var1']==1].pivot_table(index=characteristic, columns='targeted_var2', aggfunc='count', fill_value=0).iloc[:, 0:2]
+
+        # Run independence test
+        chi2, p, dof, ex = chi2_contingency(pivot)
+        results['ind_pval'] = p
+        return results
+    
+    def precision_per_group(self, var1, var2, characteristic, p, weighted=False):
+        """
+        var1 = groundtruth
+        var2 = proxies. The thing that you're evaluating the fairness of.
+        characteristic = how the group is divided
+        p = target the top p percent
+        """
+
+        data = self.weighted_data if weighted else self.unweighted_data
+
+        # Simulate targeting by var1 and var2
+        num_ones = int((p/100)*len(data))
+        num_zeros = len(data) - num_ones
+        targeting_vector = np.concatenate([np.ones(num_ones), np.zeros(num_zeros)])
+        data = data.sort_values([var1, 'random'], ascending=True)
+        data['targeted_var1'] = targeting_vector
+        data = data.sort_values([var2, 'random'], ascending=True)
+        data['targeted_var2'] = targeting_vector
+
+        # Get demographic parity and poverty share for each group
+        results = {}
+        for group in data[characteristic].unique():
+            subset = data[data[characteristic] == group]
+            results[group] = precision_score(subset['targeted_var1'], subset['targeted_var2'], zero_division=0)
+
+        # Create a pivot table between true and false positives
+        pivot = data[data['targeted_var2']==1].pivot_table(index=characteristic, columns='targeted_var1', aggfunc='count', fill_value=0).iloc[:, 0:2]
+
+        # Run independence test
+        chi2, p, dof, ex = chi2_contingency(pivot)
+        results['ind_pval'] = p
+        return results
+    
+    # --------------------------------
+    # TABLE GENERATION FUNCTIONS
+    # --------------------------------
+
+    def rank_residuals_table(self, groundtruth, proxies, characteristic, weighted=False):
+
+        data = self.weighted_data if weighted else self.unweighted_data
+
+        # Set up table
+        table = pd.DataFrame()
+        table[characteristic] = sorted(data[characteristic].unique()) + ['Anova F-Stat', 'Anova p-value']
+
+        for i, proxy in enumerate(proxies):
+
+            # Obtain rank residual distribution for each group
+            distributions, means = [], []
+            results = self.rank_residual(groundtruth, proxy, characteristic, weighted=weighted)
+            for group in sorted(data[characteristic].unique()):
+                distribution = list(results[group])
+                distributions.append(distribution)
+                means.append('%.2f (%.2f)' % (np.mean(distribution), np.std(distribution)))
+
+            # Anova test to determine whether means of distributions are statistically significantly different
+            anova = f_oneway(*tuple(distributions))
+            column = means + [anova[0]] + [anova[1]]
+
+            # Add column to table
+            table[proxy] = column
+        
+        table.set_index(characteristic, inplace=True)
+        
+        # Save and return
+        table.to_csv(self.outputs + '/rank_residuals_table_' + characteristic + '.png', index=False)
+        return table
+
+    def demographic_parity_table(self, groundtruth, proxies, characteristic, p, weighted=False, format_table=True):
+
+        data = self.weighted_data if weighted else self.unweighted_data
+        data['count'] = 1
+
+        # Set up table
+        table=pd.DataFrame()
+        groups = sorted(data[characteristic].unique())
+        table[characteristic] = groups
+
+        # Get share of population for each group
+        population_shares = data.groupby(characteristic).agg('count')
+        table["Group's share of population"] = 100*(population_shares['count'].values.flatten()/len(data))
+
+        # Get demographic parity and poverty share for each group
+        for proxy in proxies:
+            groups = sorted(data[characteristic].unique())
+            results = self.demographic_parity(groundtruth, proxy, characteristic, p, weighted=weighted)
+            if proxy == proxies[0]:
+                table["Share of Group in Target Population"] = [results[group]['poverty_share'] for group in groups] 
+            table[proxy] = [results[group]['demographic_parity'] for group in groups]
+        
+        # Clean up and return table
+        if format_table:
+            table["Group's share of population"] = table["Group's share of population"].apply(lambda x: ('%.2f' % x) + '%')
+            table["Share of Group in Target Population"] = table["Share of Group in Target Population"].apply(lambda x: ('%.2f' % x) + '%')
+            table.set_index(characteristic, inplace=True)
+
+        # Save and return
+        table.to_csv(self.outputs + '/demographic_parity_table_' + characteristic + '_' + str(p) + '%.png', index=False)
+        return table
+
+    def create_table(self, function, name, groundtruth, proxies, characteristic, p, weighted=False, format_table=True):
+        data = self.weighted_data if weighted else self.unweighted_data
+        data['count'] = 1
+
+        # Set up table
+        table=pd.DataFrame()
+        groups = sorted(data[characteristic].unique())
+        groups.append('ind_pval')
+        table[characteristic] = groups
+
+        # Get share of population for each group
+        population_shares = data.groupby(characteristic).agg('count')
+        table["Group's share of population"] = list(100*(population_shares['count'].values.flatten()/len(data))) + [0]
+
+        # Get demographic parity and poverty share for each group
+        for proxy in proxies:
+            groups = sorted(data[characteristic].unique())
+            results = function(groundtruth, proxy, characteristic, p, weighted=weighted)
+            table[proxy] = [results[group] for group in groups] + [results['ind_pval']]
+        
+        # Clean up and return table
+        if format_table:
+            table["Group's share of population"] = table["Group's share of population"].apply(lambda x: ('%.2f' % x) + '%')
+            table.iloc[-1, 1] = ''
+            table.iloc[:, 2:] = table.iloc[:, 2:].applymap('{:.4f}'.format)
+            table.set_index(characteristic, inplace=True)
+
+        # Save and return
+        table.to_csv(self.outputs + f'/{name}_table_' + characteristic + '_' + str(p) + '%.png', index=False)
+        return table
+    
+    def independence_table(self, *args, **kwargs):
+        return self.create_table(self.independence, 'independence', *args, **kwargs)
+    
+    def recall_table(self, *args, **kwargs):
+        return self.create_table(self.recall_per_group, 'recall', *args, **kwargs)
+    
+    def precision_table(self, *args, **kwargs):
+        return self.create_table(self.precision_per_group, 'precision', *args, **kwargs)
+    
+    # --------------------------------
+    # PLOTTING FUNCTIONS
+    # --------------------------------
 
     def rank_residuals_plot(self, groundtruth, proxies, characteristic, weighted=False, colors=None):
 
@@ -127,70 +350,12 @@ class Fairness:
         plt.savefig(self.outputs + '/rank_residuals_plot_' + characteristic + '.png', dpi=400)
         plt.show()
 
-    def rank_residuals_table(self, groundtruth, proxies, characteristic, weighted=False):
-
-        data = self.weighted_data if weighted else self.unweighted_data
-
-        # Set up table
-        table = pd.DataFrame()
-        table[characteristic] = sorted(data[characteristic].unique()) + ['Anova F-Stat', 'Anova p-value']
-
-        for i, proxy in enumerate(proxies):
-
-            # Obtain rank residual distribution for each group
-            distributions, means = [], []
-            results = self.rank_residual(groundtruth, proxy, characteristic, weighted=weighted)
-            for group in sorted(data[characteristic].unique()):
-                distribution = list(results[group])
-                distributions.append(distribution)
-                means.append('%.2f (%.2f)' % (np.mean(distribution), np.std(distribution)))
-
-            # Anova test to determine whether means of distributions are statistically significantly different
-            anova = f_oneway(*tuple(distributions))
-            column = means + [anova[0]] + [anova[1]]
-
-            # Add column to table
-            table[proxy] = column
+    def create_plot(self, table, name, groundtruth, proxies, characteristic, p, weighted=False):
         
-        # Save and return
-        table.to_csv(self.outputs + '/rank_residuals_table_' + characteristic + '.png', index=False)
-        return table
-
-    def demographic_parity_table(self, groundtruth, proxies, characteristic, p, weighted=False, format_table=True):
-
-        data = self.weighted_data if weighted else self.unweighted_data
-        data['count'] = 1
-
-        # Set up table
-        table=pd.DataFrame()
-        groups = sorted(data[characteristic].unique())
-        table[characteristic] = groups
-
-        # Get share of population for each group
-        population_shares = data.groupby(characteristic).agg('count')
-        table["Group's share of population"] = 100*(population_shares['count'].values.flatten()/len(data))
-
-        # Get demographic parity and poverty share for each group
-        for proxy in proxies:
-            groups = sorted(data[characteristic].unique())
-            results = self.demographic_parity(groundtruth, proxy, characteristic, p, weighted=weighted)
-            if proxy == proxies[0]:
-                table["Share of Group in Target Population"] = [results[group]['poverty_share'] for group in groups] 
-            table[proxy] = [results[group]['demographic_parity'] for group in groups]
-        
-        # Clean up and return table
-        if format_table:
-            table["Group's share of population"] = table["Group's share of population"].apply(lambda x: ('%.2f' % x) + '%')
-            table["Share of Group in Target Population"] = table["Share of Group in Target Population"].apply(lambda x: ('%.2f' % x) + '%')
-
-        # Save and return
-        table.to_csv(self.outputs + '/demographic_parity_table_' + characteristic + '_' + str(p) + '%.png', index=False)
-        return table
-
-    def demographic_parity_plot(self, groundtruth, proxies, characteristic, p, weighted=False):
-
-        # Get demographic parity table, set up parameters for grid 
-        table = self.demographic_parity_table(groundtruth, proxies, characteristic, p, weighted=weighted, format_table=False)
+        # Remove p-values and set up parameters for grid 
+        dp = name == 'demographic_parity'
+        title = name.replace('_', ' ').title()
+        table = table if dp else table.iloc[:-1, :]
         data = table[proxies]
         keys = list(data.keys())
         N = len(table)
@@ -199,15 +364,18 @@ class Fairness:
         # Format labels for y axis
         ylabels = []
         for i in range(len(table)):
-            ylabels.append('{}\n{}% of Population\n{}% in Target'\
+            if dp:
+                ylabels.append('{}\n{}% of Population\n{}% in Target'\
                         .format(table.iloc[i][characteristic], int(table.iloc[i]["Group's share of population"]), 
                         int(table.iloc[i]['Share of Group in Target Population'])))
+            else:
+                ylabels.append('{}\n{}% of Population'\
+                            .format(table.iloc[i][characteristic], int(table.iloc[i]["Group's share of population"])))
         ylabels = ylabels[::-1]
         xlabels = keys
 
         # Circles
         x, y = np.meshgrid(np.arange(M), np.arange(N))
-        radius = 15
         s = [[] for i in range(len(keys))]
         for i in range(len(keys)):
             for j in range(len(data[keys[i]])):
@@ -217,21 +385,25 @@ class Fairness:
         for i in range(arr.shape[0]-1,-1,-1):
             new_list.append(list(arr[i]))
         s = new_list
+        # S contains the recall values, from bottom to top, from left to right
 
         # set up figure
         fig = plt.figure(figsize=(2.7*len(proxies), 2.5*len(table))) 
         ax = fig.add_axes([0, 0, 1, 1])
-        ax.set_title('Demographic Parity: ' + characteristic,pad=85, fontsize='large')
+        plot_name = f'{title} per Group: ' if not dp else f'{title}: '
+        ax.set_title(plot_name + characteristic, pad=85, fontsize='large')
 
         # More circles
         s=np.array([np.array(row) for row in s])
         R = s
         c = R
-        R = np.log(np.abs(R))/10
+        R = np.log(np.abs(R) + 1)/10 if dp else R**.5 / 3
         circles = [plt.Circle((j,i), radius=r) for r, j, i in zip(R.flatten(), x.flatten(), y.flatten())]
         col = PatchCollection(circles, array=c.flatten(), cmap="RdBu_r", edgecolor='grey', linewidth=2)
-        col.set_clim(vmin=-20, vmax=20)
-        # math.log(abs(r)) / 10
+        if dp:
+            col.set_clim(vmin=-20, vmax=20)
+        else:
+            col.set_clim(vmin=0, vmax=1)
 
         # Set up ticks and labels
         ax.add_collection(col)
@@ -244,7 +416,7 @@ class Fairness:
         # Colorbar
         cbar = fig.colorbar(col, fraction=0.03, pad=0.05,)
         cbar.outline.set_edgecolor('white')
-        cbar.ax.set_ylabel('Percentage Point Difference', labelpad=20)
+        cbar.ax.set_ylabel(f'{title}', labelpad=20)
 
         # Final touches on figure
         ax.spines['top'].set_visible(False)
@@ -255,5 +427,17 @@ class Fairness:
         plt.tight_layout()
 
         # Save and show
-        plt.savefig(self.outputs + '/demographic_parity_plot_' + characteristic + '_' + str(p) + '%.png', index=False)
+        plt.savefig(self.outputs + f'/{name}_plot_' + characteristic + '_' + str(p) + '%.png')
         plt.show()
+    
+    def demographic_parity_plot(self, *args, **kwargs):
+        self.create_plot(self.demographic_parity_table(*args, **kwargs, format_table=False), 'demographic_parity', *args, **kwargs)
+
+    def independence_plot(self, *args, **kwargs):
+        self.create_plot(self.independence_table(*args, **kwargs, format_table=False), 'independence', *args, **kwargs)
+    
+    def recall_plot(self, *args, **kwargs):
+        self.create_plot(self.recall_table(*args, **kwargs, format_table=False), 'recall', *args, **kwargs)
+    
+    def precision_plot(self, *args, **kwargs):
+        self.create_plot(self.precision_table(*args, **kwargs, format_table=False), 'precision', *args, **kwargs)
