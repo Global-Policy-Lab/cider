@@ -70,10 +70,10 @@ class DataStore(InitializerInterface):
 
         # Spark setup
         # TODO(lucio): Initialize spark separately ....
-        spark = None
+        self.spark = None
         if spark:
-            spark = get_spark_session(cfg)
-        self.spark = spark
+            spark_session = get_spark_session(cfg)
+            self.spark = spark_session
 
         # Possible datasets to opt in/out of
         self.datasets = ['cdr', 'cdr_bandicoot', 'recharges', 'mobiledata', 'mobilemoney', 'features']
@@ -205,6 +205,7 @@ class DataStore(InitializerInterface):
         """
         Load phone usage features to be used for training ML model and subsequent poverty prediction
         """
+        print(f'FEATURES: {self.cfg.path.features}')
         self.features = self.spark.read.csv(self.cfg.path.features, header=True)
         if 'name' not in self.features.columns:
             raise ValueError('Features dataframe must include name column')

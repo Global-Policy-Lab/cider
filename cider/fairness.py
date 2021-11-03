@@ -1,17 +1,14 @@
-"""
-Evaluates fairness of a machine learning module across a characteristic 
-(whether or not the machine learning module discriminates across different groups in that characteristic).
-"""
-from numpy import character
-from box import Box
-import yaml
-from helpers.utils import *
-from helpers.plot_utils import *
-from helpers.io_utils import *
-from helpers.ml_utils import *
-from scipy.stats import f_oneway, chi2_contingency
-from datastore import *
-from sklearn.metrics import recall_score, precision_score
+from cider.datastore import DataStore, DataType
+from helpers.utils import make_dir
+from helpers.plot_utils import clean_plot
+from matplotlib.collections import PatchCollection  # type: ignore[import]
+import matplotlib.pyplot as plt  # type: ignore[import]
+import numpy as np
+import pandas as pd
+from pandas import DataFrame as PandasDataFrame
+from scipy.stats import f_oneway  # type: ignore[import]
+import seaborn as sns  # type: ignore[import]
+from typing import Dict, Mapping, List, Optional, Union
 
 
 class Fairness:

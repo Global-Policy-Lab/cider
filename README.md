@@ -3,7 +3,10 @@
 
 Documentation: https://docs.google.com/document/d/1CBIIIJ2wTy6UAdJ39JQYOOkc2JEPUwj_te6VC2iKEOY/edit?usp=sharing
 
-Note: On Windows, you may need to install the [numpy+mkl wheel](https://www.lfd.uci.edu/~gohlke/pythonlibs/#numpy). Download the file, then run `pip install filename.whl` in the directory.
+Note: On Windows, you may need to do the following steps:
+* Install the [numpy+mkl wheel](https://www.lfd.uci.edu/~gohlke/pythonlibs/#numpy), the [GDAL wheel](https://www.lfd.uci.edu/~gohlke/pythonlibs/#gdal), and the [Fiona wheel](https://www.lfd.uci.edu/~gohlke/pythonlibs/#fiona) for the appropriate Python version. Download the file, then run `pip install filename.whl` in the directory.
+* Install [swigwin](http://www.swig.org/download.html), and add its directory to the PATH
+* Remove auto-sklearn from the poetry lock file. 
 
 ### Deployment
 To install, and manage dependencies and virtual environments this project uses Poetry. Follow the [instructions](https://python-poetry.org/docs/) to
