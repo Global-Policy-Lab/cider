@@ -9,8 +9,8 @@ spark:
 
 
 path:
-  data: "file:///mnt/d/College/f2021/URAP/cider/synthetic_data"
-  features: 'file:///mnt/d/College/f2021/URAP/cider/outputs/featurizer/datasets/features.csv'
+  data: "../synthetic_data"
+  features: '../outputs/featurizer/datasets/features.csv'
   file_names:
     antennas: '/antennas.csv'
     cdr: '/cdr.csv'

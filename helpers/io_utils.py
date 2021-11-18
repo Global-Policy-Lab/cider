@@ -7,12 +7,14 @@ import pandas as pd
 from pyspark.sql import DataFrame as SparkDataFrame
 from pyspark.sql.functions import col, date_trunc, to_timestamp
 from typing import Dict, List, Optional, Union
+import os
 
 
 def load_generic(cfg: Box,
                  fname: Optional[str] = None,
                  df: Optional[Union[SparkDataFrame, PandasDataFrame]] = None, 
-                 location: str = None) -> SparkDataFrame:
+                 location: str = 'file',
+                 **kwargs) -> SparkDataFrame:
     """
     Args:
         cfg: box object containing config data
@@ -22,9 +24,10 @@ def load_generic(cfg: Box,
     Returns: loaded spark df
     """
     spark = get_spark_session(cfg)
+    fname = os.path.abspath(fname)
 
     if location == 'file':
-        fname = 'file:' + fname
+        fname = 'file:///' + fname
     if location == 'hdfs':
         fname = 'hdfs://localhost:9000' + fname
     
@@ -32,11 +35,11 @@ def load_generic(cfg: Box,
     if fname is not None:
         # Load data if in a single file
         if '.csv' in fname:
-            df = spark.read.csv(fname, header=True)
+            df = spark.read.csv(fname, header=True, **kwargs)
 
         # Load data if in chunks
         else:
-            df = spark.read.csv(fname + '/*.csv', header=True)
+            df = spark.read.csv(fname + '/*.csv', header=True, **kwargs)
 
     # Load from pandas dataframe
     if df is not None:

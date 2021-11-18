@@ -59,10 +59,13 @@ class DataStore(InitializerInterface):
         if "file:" in self.cfg.path.data or "hdfs:" in self.cfg.path.data:
             self.data = self.cfg.path.data
         else:
-            self.data = os.path.join(self.root, self.cfg.path.data)
+            self.data = os.path.abspath(self.cfg.path.data)
+        
+        self.spark_data = 'file:///' + self.data
         
         outputs = cfg.path.outputs
         self.outputs = outputs
+        self.spark_outputs = 'file:///' + os.path.abspath(self.outputs)
         file_names = cfg.path.file_names
         self.file_names = file_names
 
@@ -211,7 +214,8 @@ class DataStore(InitializerInterface):
         Load phone usage features to be used for training ML model and subsequent poverty prediction
         """
         print(f'FEATURES: {self.cfg.path.features}')
-        self.features = self.spark.read.csv(self.cfg.path.features, header=True)
+        self.spark_features = "file:///" + os.path.abspath(self.cfg.path.features)
+        self.features = self.spark.read.csv(self.spark_features, header=True)
         if 'name' not in self.features.columns:
             raise ValueError('Features dataframe must include name column')
 
@@ -219,7 +223,7 @@ class DataStore(InitializerInterface):
         """
         Load labels to train ML model on
         """
-        self.labels = self.spark.read.csv(self.data + self.file_names.labels, header=True)
+        self.labels = self.spark.read.csv(self.spark_data + self.file_names.labels, header=True)
         if 'name' not in self.labels.columns:
             raise ValueError('Labels dataframe must include name column')
         if 'label' not in self.labels.columns:
