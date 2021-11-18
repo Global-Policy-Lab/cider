@@ -9,8 +9,8 @@ spark:
 
 
 path:
-  data: "../synthetic_data/"
-  features: '/mnt/d/College/Fall 2021/URAP/cider/outputs/featurizer/datasets/features.csv'
+  data: "file:///mnt/d/College/f2021/URAP/cider/synthetic_data"
+  features: 'file:///mnt/d/College/f2021/URAP/cider/outputs/featurizer/datasets/features.csv'
   file_names:
     antennas: '/antennas.csv'
     cdr: '/cdr.csv'
@@ -24,7 +24,7 @@ path:
       regions: '/regions.geojson'
       prefectures: '/prefectures.geojson'
     user_consent: null
-  outputs: "../outputs/"
+  outputs: "file:///mnt/d/College/f2021/URAP/cider/outputs/"
   wd: "../"
 
 

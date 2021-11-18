@@ -55,7 +55,11 @@ class DataStore(InitializerInterface):
             self.root = cfg.path.root
         else:
             self.root = get_project_root()
-        self.data = os.path.join(self.root, self.cfg.path.data)
+        
+        if "file:" in self.cfg.path.data or "hdfs:" in self.cfg.path.data:
+            self.data = self.cfg.path.data
+        else:
+            self.data = os.path.join(self.root, self.cfg.path.data)
         outputs = cfg.path.outputs
         self.outputs = outputs
         file_names = cfg.path.file_names
@@ -345,7 +349,7 @@ class DataStore(InitializerInterface):
             end_date: e.g. '2020-01-10'
         """
         for dataset_name in self.datasets:
-            dataset = getattr(self, '_' + dataset_name, None)
+            dataset = getattr(self, dataset_name, None)
             if dataset is not None:
                 setattr(self, dataset_name, filter_dates_dataframe(dataset, start_date, end_date))
 
@@ -354,7 +358,7 @@ class DataStore(InitializerInterface):
         Remove duplicate rows from alla available datasets
         """
         for dataset_name in self.datasets:
-            dataset = getattr(self, '_' + dataset_name, None)
+            dataset = getattr(self, dataset_name, None)
             if dataset is not None:
                 setattr(self, dataset_name, dataset.distinct())
 

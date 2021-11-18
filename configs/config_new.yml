@@ -10,7 +10,7 @@ spark:
 
 path:
   data: "../synthetic_data/"
-  features: './outputs/featurizer/datasets/features.csv'
+  features: 'outputs/featurizer/datasets/features.csv'
   file_names:
     antennas: '/antennas.csv'
     cdr: '/cdr.csv'

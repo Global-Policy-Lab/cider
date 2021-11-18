@@ -1,6 +1,6 @@
 from collections import defaultdict
 import bandicoot as bc  # type: ignore[import]
-from datastore import DataStore, DataType
+from cider.datastore import DataStore, DataType
 import geopandas as gpd  # type: ignore[import]
 from helpers.utils import cdr_bandicoot_format, flatten_folder, flatten_lst, long_join_pyspark, long_join_pandas, \
     make_dir, save_df, save_parquet
@@ -189,6 +189,9 @@ class Featurizer:
         make_dir(self.outputs + '/datasets/bandicoot_records')
         make_dir(self.outputs + '/datasets/bandicoot_features')
 
+        old_outputs_name = self.outputs
+        self.outputs = self.outputs.split('://')[-1]
+
         # Get bandicoot features in chunks
         start = 0
         end = 0
@@ -201,6 +204,7 @@ class Featurizer:
             # Name outfolders
             recs_folder = self.outputs + '/datasets/bandicoot_records/' + str(start) + 'to' + str(end)
             bc_folder = self.outputs + '/datasets/bandicoot_features/' + str(start) + 'to' + str(end)
+            print(f'Making {bc_folder}')
             make_dir(bc_folder)
 
             # Get records for this chunk and write out to csv files per person
@@ -240,6 +244,8 @@ class Featurizer:
             out.count()
             start = start + bc_chunksize
 
+        self.outputs = old_outputs_name
+
         # Combine all bandicoot features into a single file, fix column names, and write to disk
         cdr_features = self.spark.read.csv(self.outputs + '/datasets/bandicoot_features/*/*', header=True)
         cdr_features = cdr_features.select([col for col in cdr_features.columns if
@@ -277,6 +283,8 @@ class Featurizer:
         save_df(international_trans, self.outputs + '/datasets/internatonal_transactions.csv')
 
         # Read international calls
+        old_outputs_name = self.outputs
+        self.outputs = self.outputs.split('://')[-1]
         inter = pd.read_csv(self.outputs + '/datasets/internatonal_transactions.csv')
 
         # Calculate list of aggregations by subscriber
@@ -299,6 +307,8 @@ class Featurizer:
         feats_df['name'] = feats_df.index
         feats_df.columns = [c if c == 'name' else 'international_' + c for c in feats_df.columns]
         feats_df.to_csv(self.outputs + '/datasets/international_feats.csv', index=False)
+        
+        self.outputs = old_outputs_name
         self.features['international'] = self.spark.read.csv(self.outputs + '/datasets/international_feats.csv',
                                                              header=True, inferSchema=True)
 
@@ -366,7 +376,7 @@ class Featurizer:
         # Merge counts and unique counts together, write to file
         feats = count_by_region.merge(unique_regions, on='name', how='outer')
         feats.columns = [c if c == 'name' else 'location_' + c for c in feats.columns]
-        feats.to_csv(self.outputs + '/datasets/location_features.csv', index=False)
+        feats.to_csv(self.outputs.split('://')[-1] + '/datasets/location_features.csv', index=False)
         self.features['location'] = self.spark.read.csv(self.outputs + '/datasets/location_features.csv',
                                                         header=True, inferSchema=True)
 

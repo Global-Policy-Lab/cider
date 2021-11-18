@@ -16,7 +16,7 @@ from pathlib import Path
 
 def get_project_root() -> Path:
     """Returns the root of the project."""
-    return Path(__file__).parent.parent
+    return Path(__file__).parent
 
 
 def get_spark_session(cfg: Box) -> SparkSession:
@@ -39,12 +39,20 @@ def save_df(df: SparkDataFrame, outfname: str, sep: str = ',') -> None:
     """
     Saves spark dataframe to csv file, using work-around to deal with spark's automatic partitioning and naming
     """
+    print(f'outfname: {outfname}')
     outfolder = outfname[:-4]
+    print(f'outfolder: {outfolder}')
+    print('Trying to write csv...')
     df.repartition(1).write.csv(path=outfolder, mode="overwrite", header="true", sep=sep)
+    print('Wrote csv!')
+    # Remove prefixes in fname before checking
+    outfname = outfname.split('://')[-1]
+    outfolder = outfolder.split('://')[-1]
     # Work around to deal with spark automatic naming
-    old_fname = [fname for fname in os.listdir(outfolder) if fname[-4:] == '.csv'][0]
-    os.rename(outfolder + '/' + old_fname, outfname)
-    shutil.rmtree(outfolder)
+    if os.path.isdir(outfolder):
+        old_fname = [fname for fname in os.listdir(outfolder) if fname[-4:] == '.csv'][0]
+        os.rename(outfolder + '/' + old_fname, outfname)
+        shutil.rmtree(outfolder)
 
 
 def save_parquet(df: SparkDataFrame, outfname: str) -> None:
