@@ -60,6 +60,7 @@ class DataStore(InitializerInterface):
             self.data = self.cfg.path.data
         else:
             self.data = os.path.join(self.root, self.cfg.path.data)
+        
         outputs = cfg.path.outputs
         self.outputs = outputs
         file_names = cfg.path.file_names

@@ -24,7 +24,7 @@ path:
       regions: '/regions.geojson'
       prefectures: '/prefectures.geojson'
     user_consent: null
-  outputs: "file:///mnt/d/College/f2021/URAP/cider/outputs/"
+  outputs: "../outputs/"
   wd: "../"
 
 

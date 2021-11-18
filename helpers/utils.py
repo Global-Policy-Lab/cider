@@ -39,12 +39,10 @@ def save_df(df: SparkDataFrame, outfname: str, sep: str = ',') -> None:
     """
     Saves spark dataframe to csv file, using work-around to deal with spark's automatic partitioning and naming
     """
-    print(f'outfname: {outfname}')
+    outfname = 'file://' + os.path.abspath(outfname)
     outfolder = outfname[:-4]
-    print(f'outfolder: {outfolder}')
-    print('Trying to write csv...')
     df.repartition(1).write.csv(path=outfolder, mode="overwrite", header="true", sep=sep)
-    print('Wrote csv!')
+
     # Remove prefixes in fname before checking
     outfname = outfname.split('://')[-1]
     outfolder = outfolder.split('://')[-1]
