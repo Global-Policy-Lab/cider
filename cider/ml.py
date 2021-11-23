@@ -1,7 +1,7 @@
 from autogluon.tabular import TabularPredictor  # type: ignore[import]
 from helpers.utils import make_dir
 from helpers.plot_utils import clean_plot
-from helpers.ml_utils import auc_overall, DropMissing, load_model, metrics, Winsorizer
+from helpers.ml_utils import auc_overall, DropMissing, load_model, metrics, Winsorizer, ConvertToDataFrame
 from cider.datastore import DataStore, DataType
 from joblib import dump, load  # type: ignore[import]
 import json
@@ -46,7 +46,8 @@ class Learner:
                                 ('scaler', StandardScaler()),
                                 ('model', LinearRegression())]),
 
-            'lasso': Pipeline([('dropmissing', DropMissing(threshold=0.9)),
+            'lasso': Pipeline([
+                               ('dropmissing', DropMissing(threshold=0.9)),
                                ('droplowvariance', VarianceThreshold(threshold=0.01)),
                                ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
                                ('winsorizer', Winsorizer(limits=(.005, .995))),
@@ -83,7 +84,9 @@ class Learner:
                                 ('scaler', StandardScaler()),
                                 ('model', LinearRegression())]),
 
-            'lasso': Pipeline([('dropmissing', DropMissing()),
+            'lasso': Pipeline([
+                               ('converttodf', ConvertToDataFrame()),
+                               ('dropmissing', DropMissing()),
                                ('droplowvariance', VarianceThreshold()),
                                ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
                                ('winsorizer', Winsorizer()),

@@ -15,7 +15,7 @@ path:
     antennas: '/antennas.csv'
     cdr: '/cdr.csv'
     home_ground_truth: '/home_locations.csv'
-    labels: '/labels.csv'
+    labels: '/labels_sampled.csv'
     mobiledata: '/mobiledata.csv'
     mobilemoney: '/mobilemoney.csv'
     poverty_scores: null
