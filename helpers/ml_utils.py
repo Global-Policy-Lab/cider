@@ -32,7 +32,7 @@ def metrics(a1: Union[ndarray, Series], a2: Union[ndarray, Series], p: float) ->
     targeting_vector = np.concatenate([np.ones(num_ones), np.zeros(num_zeros)])
     
     a = np.vstack([a1, a2])
-    a = a[:, a[0, :].argsort()]
+    a = a[:, a[0, :].argsort()].astype(int)
     a[0, :] = targeting_vector
     a = a[:, a[1, :].argsort()]
     a[1, :] = targeting_vector
