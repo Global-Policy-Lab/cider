@@ -41,14 +41,15 @@ class Learner:
 
         # Define models
         self.untuned_models = {
-            'linear': Pipeline([('dropmissing', DropMissing(threshold=0.9)),
+            'linear': Pipeline([('converttodf', ConvertToDataFrame()),
+                                ('dropmissing', DropMissing(threshold=0.9)),
                                 ('droplowvariance', VarianceThreshold(threshold=0.01)),
                                 ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
                                 ('winsorizer', Winsorizer(limits=(.005, .995))),
                                 ('scaler', StandardScaler()),
                                 ('model', LinearRegression())]),
 
-            'lasso': Pipeline([
+            'lasso': Pipeline([('converttodf', ConvertToDataFrame()),
                                ('dropmissing', DropMissing(threshold=0.9)),
                                ('droplowvariance', VarianceThreshold(threshold=0.01)),
                                ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
@@ -56,21 +57,24 @@ class Learner:
                                ('scaler', StandardScaler()),
                                ('model', Lasso(alpha=.05))]),
 
-            'ridge': Pipeline([('dropmissing', DropMissing(threshold=0.9)),
+            'ridge': Pipeline([('converttodf', ConvertToDataFrame()),
+                               ('dropmissing', DropMissing(threshold=0.9)),
                                ('droplowvariance', VarianceThreshold(threshold=0.01)),
                                ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
                                ('winsorizer', Winsorizer(limits=(.005, .995))),
                                ('scaler', StandardScaler()),
                                ('model', Ridge(alpha=.05))]),
 
-            'randomforest': Pipeline([('dropmissing', DropMissing(threshold=0.9)),
+            'randomforest': Pipeline([('converttodf', ConvertToDataFrame()),
+                                      ('dropmissing', DropMissing(threshold=0.9)),
                                       ('droplowvariance', VarianceThreshold(threshold=0.01)),
                                       ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
                                       ('winsorizer', Winsorizer(limits=(.005, .995))),
                                       ('model', RandomForestRegressor(n_estimators=100, n_jobs=-1, random_state=1,
                                                                       max_depth=4))]),
 
-            'gradientboosting': Pipeline([('dropmissing', DropMissing(threshold=0.9)),
+            'gradientboosting': Pipeline([('converttodf', ConvertToDataFrame()),
+                                          ('dropmissing', DropMissing(threshold=0.9)),
                                           ('droplowvariance', VarianceThreshold(threshold=0.01)),
                                           ('winsorizer', Winsorizer(limits=(.005, .995))),
                                           ('model', LGBMRegressor(n_estimators=100, n_jobs=-1, random_state=1,
@@ -79,7 +83,8 @@ class Learner:
         }
 
         self.tuned_models = {
-            'linear': Pipeline([('dropmissing', DropMissing()),
+            'linear': Pipeline([('converttodf', ConvertToDataFrame()),
+                                ('dropmissing', DropMissing()),
                                 ('droplowvariance', VarianceThreshold()),
                                 ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
                                 ('winsorizer', Winsorizer()),
@@ -95,20 +100,23 @@ class Learner:
                                ('scaler', StandardScaler()),
                                ('model', Lasso())]),
 
-            'ridge': Pipeline([('dropmissing', DropMissing()),
+            'ridge': Pipeline([('converttodf', ConvertToDataFrame()),
+                               ('dropmissing', DropMissing()),
                                ('droplowvariance', VarianceThreshold()),
                                ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
                                ('winsorizer', Winsorizer()),
                                ('scaler', StandardScaler()),
                                ('model', Ridge())]),
 
-            'randomforest': Pipeline([('dropmissing', DropMissing()),
+            'randomforest': Pipeline([('converttodf', ConvertToDataFrame()),
+                                      ('dropmissing', DropMissing()),
                                       ('droplowvariance', VarianceThreshold()),
                                       ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
                                       ('winsorizer', Winsorizer()),
                                       ('model', RandomForestRegressor(random_state=1, n_jobs=-1))]),
 
-            'gradientboosting': Pipeline([('dropmissing', DropMissing()),
+            'gradientboosting': Pipeline([('converttodf', ConvertToDataFrame()),
+                                          ('dropmissing', DropMissing()),
                                           ('droplowvariance', VarianceThreshold()),
                                           ('winsorizer', Winsorizer()),
                                           ('model', LGBMRegressor(random_state=1, n_jobs=-1, verbose=-10))])
