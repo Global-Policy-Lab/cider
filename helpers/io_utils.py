@@ -42,7 +42,7 @@ def load_generic(cfg: Box,
             df = spark.read.csv(fname + '/*.csv', header=True, **kwargs)
 
     # Load from pandas dataframe
-    if df is not None:
+    elif df is not None:
         if not isinstance(df, SparkDataFrame):
             df = spark.createDataFrame(df)
 
@@ -119,10 +119,12 @@ def load_cdr(cfg: Box,
     spark = get_spark_session(cfg)
     # load data as generic df and standardize column_names
     if df is not None:
-        if not isinstance(df, SparkDataFrame):
+        if isinstance(df, PandasDataFrame):
             cdr = spark.createDataFrame(df)
-        else:
+        elif isinstance(df, SparkDataFrame):
             cdr = df
+        else:
+            raise TypeError("The dataframe provided should be a spark or pandas df.")
     elif fname is not None:
         # TODO: modularize file location behavior
         cdr = load_generic(cfg, fname=fname, df=df)
@@ -172,10 +174,12 @@ def load_antennas(cfg: Box,
     spark = get_spark_session(cfg)
     # load data as generic df and standardize column_names
     if df is not None:
-        if not isinstance(df, SparkDataFrame):
+        if isinstance(df, PandasDataFrame):
             antennas = spark.createDataFrame(df)
-        else:
+        elif isinstance(df, SparkDataFrame):
             antennas = df
+        else:
+            raise TypeError("The dataframe provided should be a spark or pandas df.")
     elif fname is not None:
         antennas = load_generic(cfg, fname=fname, df=df)
     else:
@@ -213,10 +217,12 @@ def load_recharges(cfg: Box,
     spark = get_spark_session(cfg)
     # load data as generic df and standardize column_names
     if df is not None:
-        if not isinstance(df, SparkDataFrame):
+        if isinstance(df, PandasDataFrame):
             recharges = spark.createDataFrame(df)
-        else:
+        elif isinstance(df, SparkDataFrame):
             recharges = df
+        else:
+            raise TypeError("The dataframe provided should be a spark or pandas df.")
     elif fname is not None:
         recharges = load_generic(cfg, fname=fname, df=df)
     else:
@@ -224,7 +230,7 @@ def load_recharges(cfg: Box,
     recharges = standardize_col_names(recharges, cfg.col_names.recharges)
 
     # Clean timestamp column
-    recharges = recharges.withColumn('timestamp', to_timestamp(recharges['timestamp'], 'yyyy-MM-dd HH:mm:ss')) \
+    recharges = recharges.withColumn('timestamp', to_timestamp('timestamp', 'yyyy-MM-dd HH:mm:ss')) \
         .withColumn('day', date_trunc('day', col('timestamp')))
 
     # Clean duration column
@@ -248,19 +254,22 @@ def load_mobiledata(cfg: Box,
     """
     spark = get_spark_session(cfg)
     # load data as generic df and standardize column_names
-    if fname is not None:
-        mobiledata = load_generic(cfg, fname=fname, df=df)
-    elif df is not None:
-        if not isinstance(df, SparkDataFrame):
+    if df is not None:
+        if isinstance(df, PandasDataFrame):
             mobiledata = spark.createDataFrame(df)
-        else:
+        elif isinstance(df, SparkDataFrame):
             mobiledata = df
+        else:
+            raise TypeError("The dataframe provided should be a spark or pandas df.")
+    elif fname is not None:
+        mobiledata = load_generic(cfg, fname=fname, df=df)
     else:
         raise ValueError('No filename or pandas/spark dataframe provided.')
+
     mobiledata = standardize_col_names(mobiledata, cfg.col_names.mobiledata)
 
     # Clean timestamp column
-    mobiledata = mobiledata.withColumn('timestamp', to_timestamp(mobiledata['timestamp'], 'yyyy-MM-dd HH:mm:ss')) \
+    mobiledata = mobiledata.withColumn('timestamp', to_timestamp('timestamp', 'yyyy-MM-dd HH:mm:ss')) \
         .withColumn('day', date_trunc('day', col('timestamp')))
 
     # Clean duration column
@@ -286,13 +295,15 @@ def load_mobilemoney(cfg: Box,
     """
     spark = get_spark_session(cfg)
     # load data as generic df and standardize column_names
-    if fname is not None:
-        mobilemoney = load_generic(cfg, fname=fname, df=df)
-    elif df is not None:
-        if not isinstance(df, SparkDataFrame):
+    if df is not None:
+        if isinstance(df, PandasDataFrame):
             mobilemoney = spark.createDataFrame(df)
-        else:
+        elif isinstance(df, SparkDataFrame):
             mobilemoney = df
+        else:
+            raise TypeError("The dataframe provided should be a spark or pandas df.")
+    elif fname is not None:
+        mobilemoney = load_generic(cfg, fname=fname, df=df)
     else:
         raise ValueError('No filename or pandas/spark dataframe provided.')
     mobilemoney = standardize_col_names(mobilemoney, cfg.col_names.mobilemoney)
@@ -340,6 +351,9 @@ def load_shapefile(fname: str) -> GeoDataFrame:
     required_cols = ['region', 'geometry']
     error_msg = 'Shapefile format incorrect. Shapefile must include the following columns: ' + ', '.join(required_cols)
     check_cols(shapefile, required_cols, error_msg)
+
+    # Verify that the geometry column has been loaded correctly
+    assert shapefile.dtypes['geometry'] == 'geometry'
 
     shapefile['region'] = shapefile['region'].astype(str)
 

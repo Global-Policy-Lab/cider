@@ -136,7 +136,7 @@ class Learner:
             print("WARNING: The training data has fewer than 100 examples, which will likely result in unreliable "
                   "results and a model with poor predictive performance.")
         if cols < 12:
-            print("WARNING: The training data has fewer than 10 features, which could result in a model with poor "
+            print("WARNING: The training data has fewer than 12 features, which could result in a model with poor "
                   "predictive performance")
         sparse_feats = ((pd.isna(self.ds.merged).sum()/rows) > 0.9).sum()/(cols-3)*100
         if sparse_feats > 5:

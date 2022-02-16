@@ -18,19 +18,17 @@ class Fairness:
         self.cfg = datastore.cfg
         self.ds = datastore
 
-        data_path = self.cfg.path.data + self.cfg.path.file_names.fairness
-        self.data = pd.read_csv(data_path)
+        self.data = self.ds.data
         self.data['random'] = np.random.rand(len(self.data))
 
         outputs = self.cfg.path.outputs
         self.outputs = outputs
         self.default_colors = sns.color_palette('Set2', 100)
 
-        # Unweighted data
-        self.unweighted_data = self.data.copy()
-        self.unweighted_data['weight'] = 1
+        # Unweighted data - just uses original df data
+        self.unweighted_data = self.data
 
-        # Weighted data
+        # Weighted data - makes a copy of the original data and makes w copies of each entry for w in weights
         self.weighted_data = self.data.copy()
         if 'weight' not in self.weighted_data.columns:
             self.data['weight'] = 1
