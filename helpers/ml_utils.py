@@ -32,7 +32,7 @@ def metrics(a1: Union[ndarray, Series], a2: Union[ndarray, Series], p: float) ->
     targeting_vector = np.concatenate([np.ones(num_ones), np.zeros(num_zeros)])
     
     a = np.vstack([a1, a2])
-    a = a[:, a[0, :].argsort()]
+    a = a[:, a[0, :].argsort()].astype(int)
     a[0, :] = targeting_vector
     a = a[:, a[1, :].argsort()]
     a[1, :] = targeting_vector
@@ -77,6 +77,27 @@ def auc_overall(a1: Union[ndarray, Series], a2: Union[ndarray, Series]) -> float
 
     return auc(fprs, tprs)
 
+
+class ConvertToDataFrame(TransformerMixin, BaseEstimator):
+    def __init__(self) -> None:
+        pass
+
+    def fit(self, X: PandasDataFrame, y: Optional[Series] = None) -> ConvertToDataFrame:
+        if not isinstance(X, PandasDataFrame):
+            raise TypeError('Initial training data must be a dataframe!')
+        self.columns = X.columns
+        return self
+    
+    def transform(self, X: Union[PandasDataFrame, Series, np.ndarray], y: Optional[Series] = None) -> PandasDataFrame:
+        if isinstance(X, PandasDataFrame):
+            pass
+        elif isinstance(X, pd.Series):
+            X = X.to_frame.T
+        elif isinstance(X, np.ndarray):
+            X = pd.DataFrame(X.reshape(-1, X.shape[-1]), columns=self.columns)
+        else:
+            raise TypeError('Input should either be an array, a series, or a DataFrame.')
+        return X
 
 class DropMissing(TransformerMixin, BaseEstimator):
 

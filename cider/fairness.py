@@ -1,17 +1,15 @@
-"""
-Evaluates fairness of a machine learning module across a characteristic 
-(whether or not the machine learning module discriminates across different groups in that characteristic).
-"""
-from numpy import character
-from box import Box
-import yaml
-from helpers.utils import *
-from helpers.plot_utils import *
-from helpers.io_utils import *
-from helpers.ml_utils import *
-from scipy.stats import f_oneway, chi2_contingency
-from datastore import *
+from cider.datastore import DataStore, DataType
+from helpers.utils import make_dir
+from helpers.plot_utils import clean_plot
+from matplotlib.collections import PatchCollection  # type: ignore[import]
+import matplotlib.pyplot as plt  # type: ignore[import]
+import numpy as np
+import pandas as pd
+from pandas import DataFrame as PandasDataFrame
+from scipy.stats import f_oneway, chi2_contingency  # type: ignore[import]
 from sklearn.metrics import recall_score, precision_score
+import seaborn as sns  # type: ignore[import]
+from typing import Dict, Mapping, List, Optional, Union
 
 
 class Fairness:
@@ -20,19 +18,17 @@ class Fairness:
         self.cfg = datastore.cfg
         self.ds = datastore
 
-        data_path = self.cfg.path.data + self.cfg.path.file_names.fairness
-        self.data = pd.read_csv(data_path)
+        self.data = self.ds.data
         self.data['random'] = np.random.rand(len(self.data))
 
         outputs = self.cfg.path.outputs
         self.outputs = outputs
         self.default_colors = sns.color_palette('Set2', 100)
 
-        # Unweighted data
-        self.unweighted_data = self.data.copy()
-        self.unweighted_data['weight'] = 1
+        # Unweighted data - just uses original df data
+        self.unweighted_data = self.data
 
-        # Weighted data
+        # Weighted data - makes a copy of the original data and makes w copies of each entry for w in weights
         self.weighted_data = self.data.copy()
         if 'weight' not in self.weighted_data.columns:
             self.data['weight'] = 1

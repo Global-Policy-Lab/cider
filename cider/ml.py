@@ -1,8 +1,8 @@
 from autogluon.tabular import TabularPredictor  # type: ignore[import]
 from helpers.utils import make_dir
 from helpers.plot_utils import clean_plot
-from helpers.ml_utils import auc_overall, DropMissing, load_model, metrics, Winsorizer
-from datastore import DataStore, DataType
+from helpers.ml_utils import auc_overall, DropMissing, load_model, metrics, Winsorizer, ConvertToDataFrame
+from cider.datastore import DataStore, DataType
 from joblib import dump, load  # type: ignore[import]
 import json
 from lightgbm import LGBMRegressor  # type: ignore[import]
@@ -21,6 +21,8 @@ from sklearn.model_selection import cross_validate, KFold, GridSearchCV, cross_v
 from sklearn.pipeline import Pipeline  # type: ignore[import]
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, MinMaxScaler  # type: ignore[import]
 from typing import Dict, Optional, Tuple
+import lime.lime_tabular
+import joblib
 
 
 class Learner:
@@ -39,35 +41,40 @@ class Learner:
 
         # Define models
         self.untuned_models = {
-            'linear': Pipeline([('dropmissing', DropMissing(threshold=0.9)),
+            'linear': Pipeline([('converttodf', ConvertToDataFrame()),
+                                ('dropmissing', DropMissing(threshold=0.9)),
                                 ('droplowvariance', VarianceThreshold(threshold=0.01)),
                                 ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
                                 ('winsorizer', Winsorizer(limits=(.005, .995))),
                                 ('scaler', StandardScaler()),
                                 ('model', LinearRegression())]),
 
-            'lasso': Pipeline([('dropmissing', DropMissing(threshold=0.9)),
+            'lasso': Pipeline([('converttodf', ConvertToDataFrame()),
+                               ('dropmissing', DropMissing(threshold=0.9)),
                                ('droplowvariance', VarianceThreshold(threshold=0.01)),
                                ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
                                ('winsorizer', Winsorizer(limits=(.005, .995))),
                                ('scaler', StandardScaler()),
                                ('model', Lasso(alpha=.05))]),
 
-            'ridge': Pipeline([('dropmissing', DropMissing(threshold=0.9)),
+            'ridge': Pipeline([('converttodf', ConvertToDataFrame()),
+                               ('dropmissing', DropMissing(threshold=0.9)),
                                ('droplowvariance', VarianceThreshold(threshold=0.01)),
                                ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
                                ('winsorizer', Winsorizer(limits=(.005, .995))),
                                ('scaler', StandardScaler()),
                                ('model', Ridge(alpha=.05))]),
 
-            'randomforest': Pipeline([('dropmissing', DropMissing(threshold=0.9)),
+            'randomforest': Pipeline([('converttodf', ConvertToDataFrame()),
+                                      ('dropmissing', DropMissing(threshold=0.9)),
                                       ('droplowvariance', VarianceThreshold(threshold=0.01)),
                                       ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
                                       ('winsorizer', Winsorizer(limits=(.005, .995))),
                                       ('model', RandomForestRegressor(n_estimators=100, n_jobs=-1, random_state=1,
                                                                       max_depth=4))]),
 
-            'gradientboosting': Pipeline([('dropmissing', DropMissing(threshold=0.9)),
+            'gradientboosting': Pipeline([('converttodf', ConvertToDataFrame()),
+                                          ('dropmissing', DropMissing(threshold=0.9)),
                                           ('droplowvariance', VarianceThreshold(threshold=0.01)),
                                           ('winsorizer', Winsorizer(limits=(.005, .995))),
                                           ('model', LGBMRegressor(n_estimators=100, n_jobs=-1, random_state=1,
@@ -76,34 +83,40 @@ class Learner:
         }
 
         self.tuned_models = {
-            'linear': Pipeline([('dropmissing', DropMissing()),
+            'linear': Pipeline([('converttodf', ConvertToDataFrame()),
+                                ('dropmissing', DropMissing()),
                                 ('droplowvariance', VarianceThreshold()),
                                 ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
                                 ('winsorizer', Winsorizer()),
                                 ('scaler', StandardScaler()),
                                 ('model', LinearRegression())]),
 
-            'lasso': Pipeline([('dropmissing', DropMissing()),
+            'lasso': Pipeline([
+                               ('converttodf', ConvertToDataFrame()),
+                               ('dropmissing', DropMissing()),
                                ('droplowvariance', VarianceThreshold()),
                                ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
                                ('winsorizer', Winsorizer()),
                                ('scaler', StandardScaler()),
                                ('model', Lasso())]),
 
-            'ridge': Pipeline([('dropmissing', DropMissing()),
+            'ridge': Pipeline([('converttodf', ConvertToDataFrame()),
+                               ('dropmissing', DropMissing()),
                                ('droplowvariance', VarianceThreshold()),
                                ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
                                ('winsorizer', Winsorizer()),
                                ('scaler', StandardScaler()),
                                ('model', Ridge())]),
 
-            'randomforest': Pipeline([('dropmissing', DropMissing()),
+            'randomforest': Pipeline([('converttodf', ConvertToDataFrame()),
+                                      ('dropmissing', DropMissing()),
                                       ('droplowvariance', VarianceThreshold()),
                                       ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
                                       ('winsorizer', Winsorizer()),
                                       ('model', RandomForestRegressor(random_state=1, n_jobs=-1))]),
 
-            'gradientboosting': Pipeline([('dropmissing', DropMissing()),
+            'gradientboosting': Pipeline([('converttodf', ConvertToDataFrame()),
+                                          ('dropmissing', DropMissing()),
                                           ('droplowvariance', VarianceThreshold()),
                                           ('winsorizer', Winsorizer()),
                                           ('model', LGBMRegressor(random_state=1, n_jobs=-1, verbose=-10))])
@@ -123,11 +136,14 @@ class Learner:
             print("WARNING: The training data has fewer than 100 examples, which will likely result in unreliable "
                   "results and a model with poor predictive performance.")
         if cols < 12:
-            print("WARNING: The training data has fewer than 10 features, which could result in a model with poor "
+            print("WARNING: The training data has fewer than 12 features, which could result in a model with poor "
                   "predictive performance")
         sparse_feats = ((pd.isna(self.ds.merged).sum()/rows) > 0.9).sum()/(cols-3)*100
         if sparse_feats > 5:
             print(f"WARNING: {sparse_feats:.2f}% of features have data for less than 10% of users.")
+        
+        self.model_name = None
+        self.kind = None
 
     def untuned_model(self, model_name: str) -> Dict[str, str]:
         """
@@ -168,6 +184,10 @@ class Learner:
 
         # Feature importances
         self.feature_importances(model_name=model_name, kind='untuned')
+
+        # Saves location of most recently stored model name
+        self.model_name = model_name
+        self.kind = 'untuned'
 
         return scores
 
@@ -220,10 +240,15 @@ class Learner:
                 "performance; it is recommended to investigate any data issues before proceeding further.")
 
         # Save model
-        dump(model, self.outputs + '/tuned_models/' + model_name + '/model')
+        model_fp = self.outputs + '/tuned_models/' + model_name + '/model'
+        dump(model, model_fp)
 
         # Feature importances
         self.feature_importances(model_name=model_name, kind='tuned')
+
+        # Saves location of most recently stored model name
+        self.model_name = model_name
+        self.kind = 'tuned'
 
         return scores
 
@@ -463,3 +488,34 @@ class Learner:
         table = table.round(2)
         table.to_csv(self.outputs + subdir + model_name + '/targeting_table.csv', index=False)
         return table
+    
+    def explain_instance(self, instance, model_name=None, kind=None, num_features=5, discretize=True):
+        """
+        Using the model located at the given filepath, explain predictions for an instance at a given point.
+        Shows the explanation in the notebook and returns the lime explainer object.
+        """
+
+        if not model_name:
+            model_name = self.model_name
+        if not kind:
+            kind = self.kind
+        
+        X = self.ds.x.fillna(0)
+        instance = np.nan_to_num(instance)
+
+        model_name, model = load_model(model_name, out_path=self.outputs, kind=kind)
+        explainer = lime.lime_tabular.LimeTabularExplainer(
+            X.to_numpy(), 
+            feature_names = list(X.columns),
+            class_names = 'value', 
+            mode = 'regression',
+            discretize_continuous=discretize 
+        )
+        
+        exp = explainer.explain_instance(instance, model.predict, num_features = num_features)
+        exp.show_in_notebook(show_table=True)
+        return exp
+
+        
+        
+

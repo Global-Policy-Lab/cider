@@ -40,12 +40,18 @@ def save_df(df: SparkDataFrame, outfname: str, sep: str = ',') -> None:
     """
     Saves spark dataframe to csv file, using work-around to deal with spark's automatic partitioning and naming
     """
+    outfname = 'file://' + os.path.abspath(outfname)
     outfolder = outfname[:-4]
     df.repartition(1).write.csv(path=outfolder, mode="overwrite", header="true", sep=sep)
+
+    # Remove prefixes in fname before checking
+    outfname = outfname.split('://')[-1]
+    outfolder = outfolder.split('://')[-1]
     # Work around to deal with spark automatic naming
-    old_fname = [fname for fname in os.listdir(outfolder) if fname[-4:] == '.csv'][0]
-    os.rename(outfolder + '/' + old_fname, outfname)
-    shutil.rmtree(outfolder)
+    if os.path.isdir(outfolder):
+        old_fname = [fname for fname in os.listdir(outfolder) if fname[-4:] == '.csv'][0]
+        os.rename(outfolder + '/' + old_fname, outfname)
+        shutil.rmtree(outfolder)
 
 
 def save_parquet(df: SparkDataFrame, outfname: str) -> None:

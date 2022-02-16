@@ -3,14 +3,18 @@ import geopandas as gpd  # type: ignore[import]
 from geopandas import GeoDataFrame
 from helpers.utils import get_spark_session
 from pandas import DataFrame as PandasDataFrame
+import pandas as pd
 from pyspark.sql import DataFrame as SparkDataFrame
 from pyspark.sql.functions import col, date_trunc, to_timestamp
 from typing import Dict, List, Optional, Union
+import os
 
 
 def load_generic(cfg: Box,
                  fname: Optional[str] = None,
-                 df: Optional[Union[SparkDataFrame, PandasDataFrame]] = None) -> SparkDataFrame:
+                 df: Optional[Union[SparkDataFrame, PandasDataFrame]] = None, 
+                 location: str = 'file',
+                 **kwargs) -> SparkDataFrame:
     """
     Args:
         cfg: box object containing config data
@@ -20,16 +24,22 @@ def load_generic(cfg: Box,
     Returns: loaded spark df
     """
     spark = get_spark_session(cfg)
+    fname = os.path.abspath(fname)
 
+    if location == 'file':
+        fname = 'file:///' + fname
+    if location == 'hdfs':
+        fname = 'hdfs://localhost:9000' + fname
+    
     # Load from file
     if fname is not None:
         # Load data if in a single file
         if '.csv' in fname:
-            df = spark.read.csv(fname, header=True)
+            df = spark.read.csv(fname, header=True, **kwargs)
 
         # Load data if in chunks
         else:
-            df = spark.read.csv(fname + '/*.csv', header=True)
+            df = spark.read.csv(fname + '/*.csv', header=True, **kwargs)
 
     # Load from pandas dataframe
     elif df is not None:
@@ -116,6 +126,7 @@ def load_cdr(cfg: Box,
         else:
             raise TypeError("The dataframe provided should be a spark or pandas df.")
     elif fname is not None:
+        # TODO: modularize file location behavior
         cdr = load_generic(cfg, fname=fname, df=df)
     else:
         raise ValueError('No filename or pandas/spark dataframe provided.')

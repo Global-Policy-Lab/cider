@@ -32,6 +32,7 @@ wheel = "^0.37.0"
 mxnet = ">=1.7.0, <2.0.0"
 autogluon = "^0.3.1"
 Rtree = "^0.9.7"
+lime = "^0.2.0"
 
 [tool.poetry.dev-dependencies]
 ipykernel = "^6.4.1"

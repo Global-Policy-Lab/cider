@@ -12,7 +12,7 @@ import pandas as pd
 from pandas import DataFrame as PandasDataFrame, Series
 from pyspark.sql import DataFrame as SparkDataFrame
 import pyspark.sql.functions as F
-from pyspark.sql.functions import col, count, countDistinct, lit
+from pyspark.sql.functions import col, count, countDistinct, lits
 from typing import Callable, Dict, List, Mapping, Optional, Set, Union
 import yaml
 
@@ -53,9 +53,18 @@ class DataStore(InitializerInterface):
             self.root = cfg.path.root
         else:
             self.root = get_project_root()
-        self.data = os.path.join(self.root, self.cfg.path.data)
+        
+        if "file:" in self.cfg.path.data or "hdfs:" in self.cfg.path.data:
+            self.data = self.cfg.path.data
+        else:
+            self.data = os.path.abspath(self.cfg.path.data)
+        
+        # TODO: Compatibility for both hdfs and local filesystems
+        self.spark_data = 'file:///' + self.data
+        
         outputs = cfg.path.outputs
         self.outputs = outputs
+        self.spark_outputs = 'file:///' + os.path.abspath(self.outputs)
         file_names = cfg.path.file_names
         self.file_names = file_names
 
@@ -68,10 +77,10 @@ class DataStore(InitializerInterface):
 
         # Spark setup
         # TODO(lucio): Initialize spark separately ....
-        spark = None
+        self.spark = None
         if spark:
-            spark = get_spark_session(cfg)
-        self.spark = spark
+            spark_session = get_spark_session(cfg)
+            self.spark = spark_session
 
         # Possible datasets to opt in/out of
         self.datasets = ['cdr', 'cdr_bandicoot', 'recharges', 'mobiledata', 'mobilemoney', 'features']
@@ -82,7 +91,8 @@ class DataStore(InitializerInterface):
         self.mobiledata: SparkDataFrame
         self.mobilemoney: SparkDataFrame
         self.antennas: SparkDataFrame
-        self.shapefiles: Union[Dict[str, GeoDataFrame]] = {}
+        # TODO: was this supoposed to be a TypedDict?
+        # self.shapefiles: Union[Dict[str, GeoDataFrame]] = {}
         self.home_ground_truth: PandasDataFrame
         self.poverty_scores: PandasDataFrame
         # ml datasets
@@ -220,6 +230,8 @@ class DataStore(InitializerInterface):
         """
         Load labels to train ML model on
         """
+        # The top version inserts 'file:///' into the filesystem.
+        # self.labels = self.spark.read.csv(self.spark_data + self.file_names.labels, header=True)
         self.labels = self.spark.read.csv(os.path.join(self.data, self.file_names.labels), header=True)
         if 'name' not in self.labels.columns:
             raise ValueError('Labels dataframe must include name column')
