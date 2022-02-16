@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt  # type: ignore[import]
 import numpy as np
 import pandas as pd
 from pandas import DataFrame as PandasDataFrame
-from scipy.stats import f_oneway  # type: ignore[import]
+from scipy.stats import f_oneway, chi2_contingency  # type: ignore[import]
+from sklearn.metrics import recall_score, precision_score
 import seaborn as sns  # type: ignore[import]
 from typing import Dict, Mapping, List, Optional, Union
 
