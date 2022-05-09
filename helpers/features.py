@@ -39,27 +39,34 @@ def all_spark(df: SparkDataFrame, antennas: SparkDataFrame, cfg: Box) -> List[Sp
     # Assign interactions to conversations if relevant
     df = tag_conversations(df)
 
+    funcs = [
+        active_days,
+        number_of_contacts,
+        call_duration,
+        percent_nocturnal,
+        percent_initiated_conversations,
+        percent_initiated_interactions,
+        response_delay_text,
+        response_rate_text,
+        entropy_of_contacts,
+        balance_of_contacts,
+        interactions_per_contact,
+        interevent_time,
+        percent_pareto_interactions,
+        percent_pareto_durations,
+        number_of_interactions,
+        number_of_antennas,
+        entropy_of_antennas,
+        lambda df: radius_of_gyration(df, antennas),
+        frequent_antennas,
+        percent_at_home]
     # Compute features and append them to list
-    features.append(active_days(df))
-    features.append(number_of_contacts(df))
-    features.append(call_duration(df))
-    features.append(percent_nocturnal(df))
-    features.append(percent_initiated_conversations(df))
-    features.append(percent_initiated_interactions(df))
-    features.append(response_delay_text(df))
-    features.append(response_rate_text(df))
-    features.append(entropy_of_contacts(df))
-    features.append((balance_of_contacts(df)))
-    features.append(interactions_per_contact(df))
-    features.append(interevent_time(df))
-    features.append(percent_pareto_interactions(df))
-    features.append((percent_pareto_durations(df)))
-    features.append(number_of_interactions(df))
-    features.append(number_of_antennas(df))
-    features.append(entropy_of_antennas(df))
-    features.append(radius_of_gyration(df, antennas))
-    features.append(frequent_antennas(df))
-    features.append(percent_at_home(df))
+
+    for func in funcs:
+        try:
+            features.append(func(df))
+        except Exception as e:
+            print(f'Could not run {func} because of {e}')
 
     return features
 

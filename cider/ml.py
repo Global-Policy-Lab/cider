@@ -2,7 +2,7 @@ from autogluon.tabular import TabularPredictor  # type: ignore[import]
 from helpers.utils import make_dir
 from helpers.plot_utils import clean_plot
 from helpers.ml_utils import auc_overall, DropMissing, load_model, metrics, Winsorizer
-from datastore import DataStore, DataType
+from cider.datastore import DataStore, DataType
 from joblib import dump, load  # type: ignore[import]
 import json
 from lightgbm import LGBMRegressor  # type: ignore[import]
@@ -359,7 +359,7 @@ class Learner:
         # Load model
         subdir = '/' + kind + '_models/'
         oos = pd.read_csv(self.outputs + subdir + model_name + '/oos_predictions.csv')
-        oos['weight'] = 100 * ((oos['weight'] - oos['weight'].min()) / (oos['weight'].max() - oos['weight'].min()))
+        # oos['weight'] = 100 * ((oos['weight'] - oos['weight'].min()) / (oos['weight'].max() - oos['weight'].min()))
         oos_repeat = pd.DataFrame(np.repeat(oos.values, oos['weight'], axis=0), columns=oos.columns).astype(oos.dtypes)
         corr = np.corrcoef(oos_repeat['true'], oos_repeat['predicted'])[0][1]
 

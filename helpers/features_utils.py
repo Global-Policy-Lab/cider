@@ -52,7 +52,7 @@ def pivot_df(df: SparkDataFrame,
         df: pivoted spark dataframe
     """
     # Iterate through columns
-    while columns:
+    while columns and values:
         column = columns.pop()
         # Pivot values based on current column selection
         df = (df

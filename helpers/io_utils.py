@@ -6,6 +6,7 @@ from pandas import DataFrame as PandasDataFrame
 from pyspark.sql import DataFrame as SparkDataFrame
 from pyspark.sql.functions import col, date_trunc, to_timestamp
 from typing import Dict, List, Optional, Union
+from pyspark.sql.types import StructType, StructField, StringType
 
 
 def load_generic(cfg: Box,
@@ -20,7 +21,7 @@ def load_generic(cfg: Box,
     Returns: loaded spark df
     """
     spark = get_spark_session(cfg)
-
+    
     # Load from file
     if fname is not None:
         # Load data if in a single file
@@ -84,10 +85,15 @@ def standardize_col_names(df: SparkDataFrame, col_names: Dict[str, str]) -> Spar
 
     """
     col_mapping = {v: k for k, v in col_names.items()}
+    print(df.columns)
 
     for col in df.columns:
-        df = df.withColumnRenamed(col, col_mapping[col])
+        try:
+            df = df.withColumnRenamed(col, col_mapping[col])
+        except KeyError:
+            df = df.drop(col)
 
+    print(df.columns)
     return df
 
 
@@ -179,6 +185,7 @@ def load_antennas(cfg: Box,
         required_cols = ['antenna_id', 'latitude', 'longitude']
         error_msg = 'Antenna format incorrect. Antenna dataset must include the following columns: ' + ', '.join(
             required_cols)
+        antennas.show()
         check_cols(antennas, required_cols, error_msg)
 
         antennas = antennas.withColumn('latitude', col('latitude').cast('float')).withColumn('longitude',
@@ -335,6 +342,13 @@ def load_shapefile(fname: str) -> GeoDataFrame:
 
     """
     shapefile = gpd.read_file(fname)
+    if 'REGION' in shapefile.columns:
+        shapefile = shapefile.rename(columns={'REGION': 'region'})
+    if 'Cantons' in shapefile.columns:
+        shapefile = shapefile.rename(columns={'Cantons': 'region'})
+    if 'REGION_1' in shapefile.columns:
+        shapefile = shapefile.rename(columns={'REGION_1': 'region'})
+    print(f'Columns: {shapefile.columns}')
 
     # Verify that columns are correct
     required_cols = ['region', 'geometry']
@@ -346,4 +360,4 @@ def load_shapefile(fname: str) -> GeoDataFrame:
 
     shapefile['region'] = shapefile['region'].astype(str)
 
-    return shapefile
+    return shapefile[['region', 'geometry']]

@@ -161,3 +161,4 @@ book/_build/jupyter_execute/
 
 # Output figures
 /outputs/*
+nohup.out

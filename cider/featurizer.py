@@ -1,6 +1,6 @@
 from collections import defaultdict
 import bandicoot as bc  # type: ignore[import]
-from datastore import DataStore, DataType
+from cider.datastore import DataStore, DataType
 import geopandas as gpd  # type: ignore[import]
 from helpers.utils import cdr_bandicoot_format, flatten_folder, flatten_lst, long_join_pyspark, long_join_pandas, \
     make_dir, save_df, save_parquet
@@ -19,6 +19,7 @@ from pyspark.sql.functions import array, col, count, countDistinct, explode, fir
 from pyspark.sql.utils import AnalysisException
 import seaborn as sns  # type: ignore[import]
 from typing import Any, Dict, List, Optional, Union
+from py4j.protocol import Py4JJavaError
 
 
 class Featurizer:
@@ -259,12 +260,18 @@ class Featurizer:
         print('Calculating CDR features...')
 
         cdr_features = all_spark(self.ds.cdr, self.ds.antennas, cfg=self.cfg.params.cdr)
+        self.features['cdr_list'] = cdr_features
         cdr_features_df = long_join_pyspark(cdr_features, on='caller_id', how='outer')
         cdr_features_df = cdr_features_df.withColumnRenamed('caller_id', 'name')
+        cdr_features_df = cdr_features_df.toDF(*[c if c == 'name' else 'cdr_' + c for c in cdr_features_df.columns])
+        self.features['cdr'] = cdr_features_df
 
-        save_df(cdr_features_df, self.outputs + '/datasets/cdr_features_spark/all.csv')
-        self.features['cdr'] = self.spark.read.csv(self.outputs + '/datasets/cdr_features_spark/all.csv',
+        try:
+            save_df(cdr_features_df, self.outputs + '/datasets/cdr_features_spark/all.csv')
+            self.features['cdr'] = self.spark.read.csv(self.outputs + '/datasets/cdr_features_spark/all.csv',
                                                    header=True, inferSchema=True)
+        except Py4JJavaError:
+            print("Could not save DF.")
 
     def international_features(self) -> None:
         # Check that CDR is present to calculate international features
@@ -324,7 +331,12 @@ class Featurizer:
             shapefile = self.ds.shapefiles[shapefile_name].rename({'region': shapefile_name}, axis=1)
             antennas = gpd.sjoin(antennas, shapefile, op='within', how='left').drop('index_right', axis=1)
             antennas[shapefile_name] = antennas[shapefile_name].fillna('Unknown')
-        antennas = self.spark.createDataFrame(antennas.drop(['geometry', 'latitude', 'longitude'], axis=1).fillna(''))
+        antennas = antennas.drop(['geometry', 'latitude', 'longitude'], axis=1)
+        print(type(antennas))
+        print(antennas.columns)
+        antennas = pd.DataFrame(antennas).astype(str)
+        antennas = self.spark.createDataFrame(antennas)
+        print(antennas.columns)
 
         # Merge CDR to antennas
         cdr = self.ds.cdr_bandicoot.join(antennas, on='antenna_id', how='left') \
@@ -530,6 +542,128 @@ class Featurizer:
         else:
             print('No features have been computed yet.')
 
+    # def feature_plots(self, read_from_disk: bool = False) -> None:
+    #     """
+    #     Plot the distribution of a select number of features
+
+    #     Args:
+    #         read_from_disk: whether to load features from disk
+    #     """
+    #     if read_from_disk:
+    #         self.load_features()
+
+    #     # Plot of distributions of CDR features
+    #     if self.features['cdr'] is not None:
+    #         features = ['cdr_active_days__allweek__day', 'cdr_call_duration__allweek__allday__call__mean',
+    #                     'cdr_number_of_antennas__allweek__allday']
+    #         names = ['Active Days', 'Mean Call Duration', 'Number of Antennas']
+    #         distributions_plot(self.features['cdr'], features, names, color='indianred')
+    #         plt.savefig(self.outputs + '/plots/cdr.png', dpi=300)
+    #         plt.show()
+
+    #     # Plot of distributions of international features
+    #     if self.features['international'] is not None:
+    #         features = ['international_all__recipient_id__count', 'international_all__recipient_id__nunique',
+    #                     'international_call__duration__sum']
+    #         names = ['International Transactions', 'International Contacts', 'Total International Call Time']
+    #         distributions_plot(self.features['international'], features, names, color='darkorange')
+    #         plt.savefig(self.outputs + '/plots/international.png', dpi=300)
+    #         plt.show()
+
+    #     # Plot of distributions of recharges features
+    #     if self.features['recharges'] is not None:
+    #         features = ['recharges_mean', 'recharges_count', 'recharges_days']
+    #         names = ['Mean Recharge Amount', 'Number of Recharges', 'Number of Days with Recharges']
+    #         distributions_plot(self.features['recharges'], features, names, color='mediumseagreen')
+    #         plt.savefig(self.outputs + '/plots/recharges.png', dpi=300)
+    #         plt.show()
+
+    #     # Plot of distributions of mobile data features
+    #     if self.features['mobiledata'] is not None:
+    #         features = ['mobiledata_total_volume', 'mobiledata_mean_volume', 'mobiledata_num_days']
+    #         names = ['Total Volume (MB)', 'Mean Transaction Volume (MB)', 'Number of Days with Data Usage']
+    #         distributions_plot(self.features['mobiledata'], features, names, color='dodgerblue')
+    #         plt.savefig(self.outputs + '/plots/mobiledata.png', dpi=300)
+    #         plt.show()
+
+    #     # Plot of distributions of mobile money features
+    #     if self.features['mobilemoney'] is not None:
+    #         features = ['mobilemoney_all_all_amount_mean', 'mobilemoney_all_all_balance_before_mean',
+    #                     'mobilemoney_all_all_txns', 'mobilemoney_all_cashout_txns']
+    #         names = ['Mean Amount', 'Mean Balance', 'Transactions', 'Cashout Transactions']
+    #         distributions_plot(self.features['mobilemoney'], features, names, color='orchid')
+    #         plt.savefig(self.outputs + '/plots/mobilemoney.png', dpi=300)
+    #         plt.show()
+
+    #     # Spatial plots
+    #     if self.features['location'] is not None:
+    #         for shapefile_name in self.ds.shapefiles.keys():
+    #             fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+    #             columns = [c for c in self.features['location'].columns if
+    #                        shapefile_name in c and 'percent' not in c and 'Unknown' not in c]
+    #             counts = self.features['location'].select([sum(c) for c in columns]).toPandas()
+    #             counts.columns = ['_'.join(c.split('_')[2:])[:-1] for c in counts.columns]
+    #             counts = counts.T
+    #             counts.columns = ['txn_count']
+    #             counts['region'] = counts.index
+    #             counts = self.ds.shapefiles[shapefile_name].merge(counts, on='region', how='left')
+    #             counts['txn_count'] = counts['txn_count'].fillna(0) / counts['txn_count'].sum()
+    #             counts.plot(ax=ax, column='txn_count', cmap='magma', legend=True, legend_kwds={'shrink': 0.5})
+    #             ax.axis('off')
+    #             ax.set_title('Proportion of Transactions by ' + shapefile_name, fontsize='large')
+    #             plt.tight_layout()
+    #             plt.savefig(self.outputs + '/plots/spatial_' + shapefile_name + '.png')
+    #             plt.show()
+
+    #     # Cuts by feature usage (mobile money, mobile data, international calls)
+    #     if self.features['cdr'] is not None:
+
+    #         all_subscribers = self.features['cdr'].select('name')
+
+    #         if self.features['international'] is not None:
+    #             international_subscribers: Optional[SparkDataFrame] = self.features['international'].where(
+    #                 col('international_all__recipient_id__count') > 0).select('name')
+    #         else:
+    #             international_subscribers = None
+
+    #         if self.features['mobiledata'] is not None:
+    #             mobiledata_subscribers: Optional[SparkDataFrame] = self.features['mobiledata'].where(
+    #                 col('mobiledata_num_transactions') > 0).select('name')
+    #         else:
+    #             mobiledata_subscribers = None
+
+    #         if self.features['mobilemoney'] is not None:
+    #             mobilemoney_subscribers: Optional[SparkDataFrame] = self.features['mobilemoney'].where(
+    #                 col('mobilemoney_all_all_txns') > 0).select('name')
+    #         else:
+    #             mobilemoney_subscribers = None
+
+    #         features = ['cdr_active_days__allweek__day__callandtext', 'cdr_call_duration__allweek__allday__call__mean',
+    #                     'cdr_number_of_antennas__allweek__allday']
+    #         names = ['Active Days', 'Mean Call Duration', 'Number of Antennas']
+
+    #         fig, ax = plt.subplots(1, len(features), figsize=(20, 5))
+    #         for a in range(len(features)):
+    #             boxplot = []
+    #             for subscribers, slice_name in [(all_subscribers, 'All'),
+    #                                             (international_subscribers, 'I Callers'),
+    #                                             (mobiledata_subscribers, 'MD Users'),
+    #                                             (mobilemoney_subscribers, 'MM Users')]:
+    #                 if subscribers is not None:
+    #                     users = self.features['cdr'].join(subscribers, how='inner', on='name')
+    #                     slice = users.select(['name', features[a]]).toPandas()
+    #                     slice['slice_name'] = slice_name
+    #                     boxplot.append(slice)
+    #             boxplot_df = pd.concat(boxplot)
+    #             boxplot_df[features[a]] = boxplot_df[features[a]].astype('float')
+    #             sns.boxplot(data=boxplot_df, x=features[a], y='slice_name', ax=ax[a], palette="Set2", orient='h')
+    #             ax[a].set_xlabel('Feature')
+    #             ax[a].set_ylabel(names[a])
+    #             ax[a].set_title(names[a], fontsize='large')
+    #             clean_plot(ax[a])
+    #         plt.savefig(self.outputs + '/plots/boxplots.png', dpi=300)
+    #         plt.show()
+    
     def feature_plots(self, read_from_disk: bool = False) -> None:
         """
         Plot the distribution of a select number of features
@@ -542,8 +676,8 @@ class Featurizer:
 
         # Plot of distributions of CDR features
         if self.features['cdr'] is not None:
-            features = ['cdr_active_days__allweek__day__callandtext', 'cdr_call_duration__allweek__allday__call__mean',
-                        'cdr_number_of_antennas__allweek__allday']
+            features = ['cdr_active_days_allweek_day', 'cdr_call_duration_allweek_allday_call_mean',
+                        'cdr_number_of_antennas_allweek_allday']
             names = ['Active Days', 'Mean Call Duration', 'Number of Antennas']
             distributions_plot(self.features['cdr'], features, names, color='indianred')
             plt.savefig(self.outputs + '/plots/cdr.png', dpi=300)
@@ -551,8 +685,8 @@ class Featurizer:
 
         # Plot of distributions of international features
         if self.features['international'] is not None:
-            features = ['international_all__recipient_id__count', 'international_all__recipient_id__nunique',
-                        'international_call__duration__sum']
+            features = ['international_all_recipient_id_count', 'international_all_recipient_id_nunique',
+                        'international_call_duration_sum']
             names = ['International Transactions', 'International Contacts', 'Total International Call Time']
             distributions_plot(self.features['international'], features, names, color='darkorange')
             plt.savefig(self.outputs + '/plots/international.png', dpi=300)
@@ -610,7 +744,7 @@ class Featurizer:
 
             if self.features['international'] is not None:
                 international_subscribers: Optional[SparkDataFrame] = self.features['international'].where(
-                    col('international_all__recipient_id__count') > 0).select('name')
+                    col('international_all_recipient_id_count') > 0).select('name')
             else:
                 international_subscribers = None
 
@@ -626,8 +760,8 @@ class Featurizer:
             else:
                 mobilemoney_subscribers = None
 
-            features = ['cdr_active_days__allweek__day__callandtext', 'cdr_call_duration__allweek__allday__call__mean',
-                        'cdr_number_of_antennas__allweek__allday']
+            features = ['cdr_active_days_allweek_day', 'cdr_call_duration_allweek_allday_call_mean',
+                        'cdr_number_of_antennas_allweek_allday']
             names = ['Active Days', 'Mean Call Duration', 'Number of Antennas']
 
             fig, ax = plt.subplots(1, len(features), figsize=(20, 5))

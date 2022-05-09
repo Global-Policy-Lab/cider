@@ -41,7 +41,7 @@ class InitializerInterface(ABC):
 
 
 class DataStore(InitializerInterface):
-    def __init__(self, cfg_dir: str, spark: bool = True):
+    def __init__(self, cfg_dir: str, spark_bool: bool = True):
         # Read config file and store paths
         with open(cfg_dir, "r") as ymlfile:
             cfg = Box(yaml.load(ymlfile, Loader=yaml.FullLoader))
@@ -69,7 +69,7 @@ class DataStore(InitializerInterface):
         # Spark setup
         # TODO(lucio): Initialize spark separately ....
         spark = None
-        if spark:
+        if spark_bool:
             spark = get_spark_session(cfg)
         self.spark = spark
 
@@ -138,7 +138,6 @@ class DataStore(InitializerInterface):
         """
         fpath = os.path.join(self.data, self.file_names.antennas) if self.file_names.antennas is not None else None
         if fpath or dataframe is not None:
-            print('Loading antennas...')
             self.antennas = load_antennas(self.cfg, fpath, df=dataframe)
 
     def _load_recharges(self, dataframe: Optional[Union[SparkDataFrame, PandasDataFrame]] = None) -> None:
@@ -185,8 +184,9 @@ class DataStore(InitializerInterface):
         """
         # Load shapefiles
         shapefiles = self.file_names.shapefiles
-        for shapefile_fname in shapefiles.keys():
-            self.shapefiles[shapefile_fname] = load_shapefile(self.data + shapefiles[shapefile_fname])
+        if shapefiles:
+            for shapefile_fname in shapefiles.keys():
+                self.shapefiles[shapefile_fname] = load_shapefile(self.data + shapefiles[shapefile_fname])
 
     def _load_home_ground_truth(self) -> None:
         """
@@ -339,8 +339,11 @@ class DataStore(InitializerInterface):
         failed_load = []
         for key in data_type_map:
             dataset = key.name.lower()
-            if getattr(self, dataset) is None:
-                failed_load.append(dataset)
+            if getattr(self, dataset, None) is None:
+                if self.file_names[dataset] is None:
+                    setattr(self, dataset, None)
+                else:
+                    failed_load.append(dataset)
         if failed_load:
             raise ValueError(f"The following datasets failed to load: {', '.join(failed_load)}")
 

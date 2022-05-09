@@ -14,6 +14,8 @@ from typing import List, Tuple, Union
 from typing_extensions import Literal
 from pathlib import Path
 
+from py4j.protocol import Py4JJavaError
+
 
 def get_project_root() -> Path:
     """Returns the root of the project."""
@@ -41,11 +43,21 @@ def save_df(df: SparkDataFrame, outfname: str, sep: str = ',') -> None:
     Saves spark dataframe to csv file, using work-around to deal with spark's automatic partitioning and naming
     """
     outfolder = outfname[:-4]
-    df.repartition(1).write.csv(path=outfolder, mode="overwrite", header="true", sep=sep)
-    # Work around to deal with spark automatic naming
-    old_fname = [fname for fname in os.listdir(outfolder) if fname[-4:] == '.csv'][0]
-    os.rename(outfolder + '/' + old_fname, outfname)
-    shutil.rmtree(outfolder)
+    try:
+        df.repartition(1).write.csv(path=outfolder, mode="overwrite", header="true", sep=sep)
+        # Work around to deal with spark automatic naming
+        old_fname = [fname for fname in os.listdir(outfolder) if fname[-4:] == '.csv'][0]
+        os.rename(outfolder + '/' + old_fname, outfname)
+        shutil.rmtree(outfolder)
+    except Py4JJavaError:
+        try:
+            print("Could not save df as a single CSV. Will try with multiple partitions.")
+            df.write.csv(path=outfolder, mode="overwrite", header="true", sep=sep)
+            print("Saved df with multiple partitions.")
+        except Py4JJavaError:
+            print("Could not save df without repartitioning. Will try with 1000 partitions.")
+            df.repartition(1000).write.csv(path=outfolder, mode="overwrite", header="true", sep=sep)
+            print("Saved df with 1000 partitions.")
 
 
 def save_parquet(df: SparkDataFrame, outfname: str) -> None:
@@ -118,6 +130,7 @@ def cdr_bandicoot_format(cdr: SparkDataFrame, antennas: SparkDataFrame, cfg: Box
     """
 
     cols = list(cfg.keys())
+    cols.append('recipient_antenna')
 
     outgoing = cdr.select(cols)\
         .withColumnRenamed('txn_type', 'interaction')\
@@ -138,10 +151,15 @@ def cdr_bandicoot_format(cdr: SparkDataFrame, antennas: SparkDataFrame, cfg: Box
         .withColumnRenamed('recipient_antenna', 'antenna_id')\
         .withColumn('direction', lit('in'))\
         .drop('caller_antenna')
+    
+    print(outgoing.columns)
+    print(incoming.columns)
 
     cdr_bandicoot = outgoing.select(incoming.columns).union(incoming)\
         .withColumn('call_duration', col('call_duration').cast(IntegerType()).cast(StringType()))\
         .withColumn('datetime', date_format(col('datetime'), 'yyyy-MM-dd HH:mm:ss'))
+    
+    print(cdr_bandicoot.columns)
     
     if antennas is not None:
         cdr_bandicoot = cdr_bandicoot.join(antennas.select(['antenna_id', 'latitude', 'longitude']),
