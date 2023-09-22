@@ -51,27 +51,50 @@ def all_spark(
         features: list of features as spark dataframes
     """
     features = []
+    # TODO: remove this
     df_input = df
-    df = (df
-          # Add weekday and daytime columns for subsequent groupby(s)
-          .withColumn('weekday', F.when(F.dayofweek('day').isin(cfg.weekend), 'weekend').otherwise('weekday'))
-          .withColumn('daytime', F.when((F.hour('timestamp') < cfg.start_of_day) |
-                                        (F.hour('timestamp') >= cfg.end_of_day), 'night').otherwise('day'))
-          # Duplicate rows, switching caller and recipient columns
-          .withColumn('direction', lit('out'))
-          .withColumn('directions', F.array(lit('in'), col('direction')))
-          .withColumn('direction', F.explode('directions'))
-          .withColumn('caller_id_copy', col('caller_id'))
-          .withColumn('caller_antenna_copy', col('caller_antenna'))
-          .withColumn('caller_id', F.when(col('direction') == 'in', col('recipient_id')).otherwise(col('caller_id')))
-          .withColumn('recipient_id',
-                      F.when(col('direction') == 'in', col('caller_id_copy')).otherwise(col('recipient_id')))
-          .withColumn('caller_antenna',
-                      F.when(col('direction') == 'in', col('recipient_antenna')).otherwise(col('caller_antenna')))
-          .withColumn('recipient_antenna',
-                      F.when(col('direction') == 'in', col('caller_antenna_copy')).otherwise(col('recipient_antenna')))
-          .drop('directions', 'caller_id_copy', 'recipient_antenna_copy'))
+    df = (
+        df
+        # Add weekday and daytime columns for subsequent groupby(s)
+        .withColumn('weekday', F.when(F.dayofweek('day').isin(cfg.weekend), 'weekend').otherwise('weekday'))
+        .withColumn('daytime', F.when((F.hour('timestamp') < cfg.start_of_day) |
+                                    (F.hour('timestamp') >= cfg.end_of_day), 'night').otherwise('day'))
+        # Duplicate rows, switching caller and recipient columns
+        .withColumn('direction', lit('out'))
+        .withColumn('directions', F.array(lit('in'), col('direction')))
+        .withColumn('direction', F.explode('directions'))
+        .withColumn('caller_id_copy', col('caller_id'))
+        .withColumn('caller_id', F.when(col('direction') == 'in', col('recipient_id')).otherwise(col('caller_id')))
+        .withColumn('recipient_id',
+                  F.when(col('direction') == 'in', col('caller_id_copy')).otherwise(col('recipient_id')))
+        .drop('directions', 'caller_id_copy')
+    )
+    
+    # If any antennas are specified, we'll add both caller and recipient antenna columns, leaving missing info null
+    if ('caller_antenna' in df.columns) or ('recipient_antenna' in df.columns):
 
+        if 'caller_antenna' in df.columns:
+            df = df.withColumn('caller_antenna_copy', col('caller_antenna'))
+            caller_antenna_column = lambda: col('caller_antenna_copy')
+        else:
+            caller_antenna_column = lambda: lit(None).cast(StringType())
+        
+        if 'recipient_antenna' in df.columns:
+            recipient_antenna_column = lambda: col('recipient_antenna')
+        else:
+            recipient_antenna_column = lambda: lit(None).cast(StringType())
+            
+        df = (
+            df
+            .withColumn(
+                'caller_antenna',
+                F.when(col('direction') == 'in', recipient_antenna_column()).otherwise(caller_antenna_column())
+            )
+            .withColumn(
+                'recipient_antenna',
+                F.when(col('direction') == 'in', caller_antenna_column()).otherwise(recipient_antenna_column())
+            )
+        ).drop('caller_antenna_copy')
     # 'caller_id' contains the subscriber in question for featurization purposes; that's what we'll filter by.
     df = filter_by_phone_numbers_to_featurize(phone_numbers_to_featurize, df, 'caller_id')
 
